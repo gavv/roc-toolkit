@@ -1,0 +1,43 @@
+name: "lint pr"
+
+on:
+  pull_request:
+    types:
+      - opened
+
+jobs:
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Check linked issue
+        id: linked-issues
+        uses: nearform-actions/github-action-check-linked-issues@v1
+        continue-on-error: true
+        with:
+          comment: false
+
+      - name: Check mentioned issue
+        id: mentioned-issues
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const pattern = /(^|\s)#\d+($|\s)/;
+            const body = github.context.payload.pull_request.body;
+            console.log(body);
+            return pattern.test(body);
+
+      - name: Post Comment
+        if: |
+          steps.linked-issues.outputs.linked_issues_count == 0 &&
+          steps.mentioned-issues.outputs.result == false
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.issues.createComment({
+              owner: github.context.repo.owner,
+              repo: github.context.repo.repo,
+              issue_number: github.context.payload.pull_request.number,
+              body: 'Test comment.'
+            })
