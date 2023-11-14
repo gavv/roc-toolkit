@@ -110,29 +110,29 @@ def guess_issue(org, repo, pr_body):
     if not pr_body:
         return None
 
-    keywords = 'close closes closed fix fixes resolve resolves resolved'.split()
-    keywords.append('')
+    delim = r'[,:;?!()\[\]|+*_~<> \t\n\r]'
 
-    for keyword in keywords:
-        suffix = r'(?:$|\s)'
-        prefix = r'(?:^|\s)'
-        if keyword:
-            prefix += keyword + r'\s+'
+    prefix = f'(?:^|(?<={delim}))'
+    suffix = f'(?:$|(?={delim}))'
 
-        m = re.search(f'{prefix}(#|gh-)(\d+){suffix}', pr_body, re.IGNORECASE)
-        if m:
-            return org, repo, int(m.group(2))
+    patterns = [
+        r'(?:#|gh-)(\d+)',
+        r'([\w-]+)/([\w-]+)#(\d+)',
+        r'https?://github.com/([\w-]+)/([\w-]+)/issues/(\d+)(?:#[\w\d-]+)?',
+    ]
 
-        for m in re.finditer(f'{prefix}([\w-]+)/([\w-]+)#(\d+){suffix}',
-            pr_body, re.IGNORECASE):
-            if m.group(1) == org:
-                return org, m.group(2), int(m.group(3))
+    regexp = re.compile('|'.join([prefix + p + suffix for p in patterns]),
+        re.IGNORECASE | re.M)
 
-    for m in re.finditer(
-        r'(?:^|\s)https?://github.com/([\w-]+)/([\w-]+)/issues/(\d+)(?:$|\s)',
-        pr_body, re.IGNORECASE):
-        if m.group(1) == org:
-            return org, m.group(2), int(m.group(3))
+    for m in regexp.finditer(pr_body):
+        if m.group(1):
+            return org, repo, int(m.group(1))
+
+        if m.group(2) == org:
+            return m.group(2), m.group(3), int(m.group(4))
+
+        if m.group(5) == org:
+            return m.group(5), m.group(6), int(m.group(7))
 
     return None
 
@@ -202,10 +202,9 @@ def query_pr_info(org, repo, pr_number):
         'target_sha': response['base']['sha'],
     }
 
-    if 'issue_link' in response:
+    pr_info['issue_link'] = guess_issue(org, repo, response['body'])
+    if pr_info['issue_link'] is None and 'issue_link' in response:
         pr_info['issue_link'] = (org, repo, int(response['issue']['number']))
-    else:
-        pr_info['issue_link'] = guess_issue(org, repo, response['body'])
 
     if pr_info['issue_link']:
         issue_info = query_issue_info(*pr_info['issue_link'])
@@ -258,23 +257,63 @@ def query_pr_commits(org, repo, pr_number):
 
     return results
 
-def show_pr(org, repo, pr_number):
+def show_pr(org, repo, pr_number, show_json):
     pr_info = query_pr_info(org, repo, pr_number)
 
+    first_section = True
+    first_key = True
+
     def section(name):
-        print(f'{Fore.GREEN}{Style.BRIGHT}{name}:{Style.RESET_ALL}')
+        if show_json:
+            nonlocal first_section, first_key
+            first_key = True
+            if first_section:
+                first_section = False
+                print('{')
+            else:
+                print('\n  },')
+            print(f'  "{name.replace(" ", "_")}": {{')
+        else:
+            print(f'{Fore.GREEN}{Style.BRIGHT}{name}:{Style.RESET_ALL}')
 
     def keyval(key, val, color=None):
-        if color:
-            print(f'  {key}: {color}{Style.BRIGHT}{val}{Style.RESET_ALL}')
+        if show_json:
+            nonlocal first_key
+            if not first_key:
+                print(',')
+            first_key = False
+            print(f'    "{key}": "{val}"', end='')
         else:
-            print(f'  {key}: {val}')
+            if color:
+                print(f'  {key}: {color}{Style.BRIGHT}{val}{Style.RESET_ALL}')
+            else:
+                print(f'  {key}: {val}')
 
-    def val(val, color=None):
-        if color:
-            print(f'  {color}{Style.BRIGHT}{val}{Style.RESET_ALL}')
+    def empty(val, color=None):
+        if show_json:
+            pass
         else:
-            print(f'  {val}')
+            if color:
+                print(f'  {color}{Style.BRIGHT}{val}{Style.RESET_ALL}')
+            else:
+                print(f'  {val}')
+
+    def commit(sha, msg, author, email):
+        if show_json:
+            keyval("sha", sha)
+            keyval("message", msg)
+            keyval("author", author)
+            keyval("email", email)
+        else:
+            if 'users.noreply.github.com' in email:
+                email = 'noreply.github.com'
+            print(f'  {sha[:8]} {Fore.BLUE}{Style.BRIGHT}{msg}{Style.RESET_ALL}'+
+                f' ({author} <{email}>)')
+
+    def end():
+        if show_json:
+            print('\n  }')
+            print('}')
 
     section('pull request')
     keyval('title', pr_info['pr_title'], Fore.BLUE)
@@ -299,7 +338,7 @@ def show_pr(org, repo, pr_number):
         keyval('milestone', str(pr_info['issue_milestone']).lower(),
                Fore.MAGENTA if pr_info['issue_milestone'] is not None else Fore.RED)
     else:
-        val('not found', Fore.RED)
+        empty('not found', Fore.RED)
 
     section('actions')
     has_actions = False
@@ -308,19 +347,18 @@ def show_pr(org, repo, pr_number):
         keyval(action_name, action_result,
               Fore.MAGENTA if action_result == 'success' else Fore.RED)
     if not has_actions:
-        val('not found', Fore.RED)
+        empty('not found', Fore.RED)
 
     section('commits')
     has_commits = False
     for commit_sha, commit_msg, commit_author, commit_email in \
         query_pr_commits(org, repo, pr_number):
         has_commits = True
-        if 'users.noreply.github.com' in commit_email:
-            commit_email = 'noreply.github.com'
-        print(f'  {commit_sha[:8]} {Fore.BLUE}{Style.BRIGHT}{commit_msg}{Style.RESET_ALL}'+
-              f' ({commit_author} <{commit_email}>)')
+        commit(commit_sha, commit_msg, commit_author, commit_email)
     if not has_commits:
-        val('not found', Fore.RED)
+        empty('not found', Fore.RED)
+
+    end()
 
 def verify_pr(org, repo, pr_number, issue_number, miletsone_name, force):
     pr_info = query_pr_info(org, repo, pr_number)
@@ -537,6 +575,8 @@ show_parser = subparsers.add_parser(
     'show', parents=[common_parser],
     help='show pull request info')
 show_parser.add_argument('pr_number', type=int)
+show_parser.add_argument('--json', action='store_true', dest='json',
+                         help="output in json format")
 
 link_parser = subparsers.add_parser(
     'link', parents=[common_parser],
@@ -564,7 +604,7 @@ DRY_RUN = args.dry_run
 colorama.init()
 
 if args.command == 'show':
-    show_pr(args.org, args.repo, args.pr_number)
+    show_pr(args.org, args.repo, args.pr_number, args.json)
     exit(0)
 
 if args.command == 'link' or args.command == 'unlink':
