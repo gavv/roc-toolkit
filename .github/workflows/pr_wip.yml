@@ -3,8 +3,8 @@ name: "pr_wip"
 on:
   pull_request_target:
     types:
-      - converted_to_draft
       - review_request_removed
+      - converted_to_draft
 
 jobs:
   main:
