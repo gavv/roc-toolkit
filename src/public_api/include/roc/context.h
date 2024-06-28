@@ -93,7 +93,7 @@ ROC_API int roc_context_open(const roc_context_config* config, roc_context** res
  *    to internal encodings table
  */
 ROC_API int roc_context_register_encoding(roc_context* context,
-                                          int encoding_id,
+                                          unsigned int encoding_id,
                                           const roc_media_encoding* encoding);
 
 /** Close the context.

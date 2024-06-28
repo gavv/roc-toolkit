@@ -44,7 +44,7 @@ public:
         return ctx_;
     }
 
-    void register_multitrack_encoding(int encoding_id, unsigned num_tracks) {
+    void register_multitrack_encoding(unsigned encoding_id, unsigned num_tracks) {
         roc_media_encoding encoding;
         memset(&encoding, 0, sizeof(encoding));
         encoding.rate = SampleRate;
