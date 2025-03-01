@@ -2,7 +2,7 @@
 #
 # Details: https://roc-streaming.org/toolkit/docs/building/dependencies.html
 
-{ pkgs ? import <nixpkgs> {} }:
+{ pkgs ? import <nixpkgs> {} }:ssss
 
 pkgs.clangStdenv.mkDerivation {
   name = "clang-shell";
