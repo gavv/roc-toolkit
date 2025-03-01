@@ -1,4 +1,4 @@
-src/internal_modules/roc_audio/channel_tables.cpp
+src/internal_modules/roc_audio/channel_tables.cppss
 src/internal_modules/roc_audio/pcm_subformat.cpp
 src/internal_modules/roc_core/macro_helpers.h
 src/internal_modules/roc_core/target_libatomic_ops/roc_core/atomic_ops.h
