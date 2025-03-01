@@ -15,5 +15,5 @@ jobs:
     steps:
       - uses: andymckay/labeler@1.0.4
         with:
-          add-labels: 'ready for review'
-          remove-labels: 'work in progress,needs revision'
+          add-labels: 'status: ready for review'
+          remove-labels: 'status: work in progress,status: needs revision'

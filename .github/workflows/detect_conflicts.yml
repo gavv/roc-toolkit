@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: eps1lon/actions-label-merge-conflict@v2.1.0
         with:
-          dirtyLabel: "needs rebase"
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          dirtyLabel: 'status: needs rebase'
           commentOnDirty: ":robot: The latest upstream change made this pull request unmergeable.
-            Please resolve the merge conflicts."
+            Please rebase on fresh `develop` branch and resolve merge conflicts."

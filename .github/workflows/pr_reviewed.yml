@@ -1,0 +1,20 @@
+name: "pr_reviewed"
+
+on:
+  pull_request_review:
+    types:
+      - submitted
+      - edited
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number || github.ref }}
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: andymckay/labeler@1.0.4
+        if: github.event.review.state == 'changes_requested'
+        with:
+          add-labels: 'status: needs revision'
+          remove-labels: 'status: ready for review,status: work in progress'
