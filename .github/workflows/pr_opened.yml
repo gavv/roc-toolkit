@@ -4,45 +4,93 @@ on:
   pull_request_target:
     types:
       - opened
+      - reopened
 
 concurrency:
   group: pr-${{ github.event.pull_request.number || github.ref }}
 
 jobs:
-  check-ready:
+  check-status:
     runs-on: ubuntu-latest
     steps:
-      - name: Add label
+      - name: Add label (work in progress)
         uses: andymckay/labeler@1.0.4
-        if: github.event.pull_request.draft == true
+        if: |
+          github.event.pull_request.draft == true
         with:
-          add-labels: 'work in progress'
+          add-labels: 'status: work in progress'
 
-      - name: Add label
+      - name: Add label (ready for review)
         uses: andymckay/labeler@1.0.4
-        if: tojson(github.event.pull_request.requested_reviewers) != '[]'
+        if: |
+          tojson(github.event.pull_request.requested_reviewers) != '[]'
         with:
-          add-labels: 'ready for review'
+          add-labels: 'status: ready for review'
 
-  check-contrib:
+  check-build:
+    permissions:
+      checks: read
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check contrib
-        id: contrib
+      - name: Wait build
+        uses: poseidon/wait-for-status-checks@v0.6.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Collect info
+        id: info
         run: |
-          echo flag=$(scripts/rgh.py show_pr ${{ github.event.pull_request.number }} --json \
-            | jq -r .pull_request.contrib) >> "$GITHUB_OUTPUT"
+          echo build-status="$(scripts/rgh.py show_pr ${{ github.event.pull_request.number }} --json \
+            | jq -c .actions.build)" >> "$GITHUB_OUTPUT"
         env:
          GH_TOKEN: ${{ secrets.github_token }}
 
-      - name: Add label
-        if: steps.contrib.outputs.flag == 'true'
+      - name: Collect labels
+        id: labels
+        uses: joerick/pr-labels-action@v1.0.9
+
+      - name: Add label (work in progress)
+        if: |
+          steps.info.outputs.build-status == 'failure' &&
+          !contains(steps.labels.outputs.labels, 'status:')
         uses: andymckay/labeler@1.0.4
         with:
-          add-labels: 'contribution'
+          add-labels: 'status: work in progress'
+
+      - name: Post comment (work in progress)
+        if: |
+          steps.info.outputs.build-status == 'failure' &&
+          !contains(steps.labels.outputs.labels, 'status:')
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: ":robot: Upon creation, pull request has failed checks and is automatically
+            marked as work-in-progress. If you believe the failures are unrelated or you want
+            an early review, please click on the 'request review' button. Otherwise, please fix
+            failures before requesting review."
+
+      - name: Add label (ready for review)
+        if: |
+          steps.info.outputs.build-status == 'success' &&
+          !contains(steps.labels.outputs.labels, 'status:')
+        uses: andymckay/labeler@1.0.4
+        with:
+          add-labels: 'status: ready for review'
+
+  check-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post comment (wrong branch)
+        if: |
+          github.event.pull_request.base.ref != 'develop'
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: ":robot: Upon creation, pull request is not targeted to `develop` branch.
+            Normally all pull requestes should be targeted to it.
+            If this was not intentional, please rebase and re-target pull request.
+            Please use rebase with force push instead of regular merge."
 
   check-issue:
     runs-on: ubuntu-latest
@@ -50,21 +98,42 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check issue
-        id: issue
+      - name: Collect info
+        id: info
         run: |
-          echo url=$(scripts/rgh.py show_pr ${{ github.event.pull_request.number }} --json \
-            | jq -r .issue.url) >> "$GITHUB_OUTPUT"
+          echo issue-url="$(scripts/rgh.py show_pr ${{ github.event.pull_request.number }} --json \
+            | jq -r .issue.url)" >> "$GITHUB_OUTPUT"
         env:
          GH_TOKEN: ${{ secrets.github_token }}
 
-      - name: Post Comment
+      - name: Post comment (missing issue)
         if: |
-          steps.issue.outputs.url == '' ||
-          steps.issue.outputs.url == 'null'
+          steps.info.outputs.issue-url == '' ||
+          steps.info.outputs.issue-url == 'null'
         uses: thollander/actions-comment-pull-request@v2
         with:
           message: ":robot: Upon creation, pull request description does not have a link to an issue.
             If there is a related issue, please add it to the description
             using any of the [supported formats](https://docs.github.com/en/get-started/\
             writing-on-github/working-with-advanced-formatting/autolinked-references-and-urls)."
+
+  check-contrib:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Collect info
+        id: info
+        run: |
+          echo is-contrib="$(scripts/rgh.py show_pr ${{ github.event.pull_request.number }} --json \
+            | jq -r .pull_request.contrib)" >> "$GITHUB_OUTPUT"
+        env:
+         GH_TOKEN: ${{ secrets.github_token }}
+
+      - name: Add label (contribution)
+        if: |
+          steps.info.outputs.is-contrib == 'true'
+        uses: andymckay/labeler@1.0.4
+        with:
+          add-labels: 'contribution'

@@ -14,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: andymckay/labeler@1.0.4
+        if: |
+          github.event.pull_request.draft == true ||
+          tojson(github.event.pull_request.requested_reviewers) == '[]'
         with:
-          add-labels: 'work in progress'
-          remove-labels: 'ready for review,needs revision'
+          add-labels: 'status: work in progress'
+          remove-labels: 'status: ready for review,status: needs revision'
