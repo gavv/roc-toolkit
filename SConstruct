@@ -5,7 +5,7 @@ import platform
 import re
 import sys
 
-# supported platform names
+# supported platform names ddd
 supported_platforms = [
     'linux',
     'unix',
