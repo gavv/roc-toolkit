@@ -1,0 +1,18 @@
+name: "pr_reviewed"
+
+on:
+  pull_request_review:
+    types:
+      - submitted
+      - edited
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number || github.ref }}
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: roc-streaming/ci/.github/workflows/pr_status_needs_revision.yml@main
+        if: |
+          github.event.review.state == 'changes_requested'

@@ -8,6 +8,8 @@ on:
       - "!*"
   pull_request_target:
     types:
+      - opened
+      - reopened
       - synchronize
 
 concurrency:
@@ -17,9 +19,6 @@ jobs:
   main:
     runs-on: ubuntu-latest
     steps:
-      - uses: eps1lon/actions-label-merge-conflict@v2.1.0
+      - uses: roc-streaming/ci/.github/workflows/pr_check_conflicts.yml@main
         with:
-          dirtyLabel: "needs rebase"
-          repoToken: "${{ secrets.GITHUB_TOKEN }}"
-          commentOnDirty: ":robot: The latest upstream change made this pull request unmergeable.
-            Please resolve the merge conflicts."
+          base-branch: develop
